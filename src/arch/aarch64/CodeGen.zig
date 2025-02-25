@@ -572,7 +572,7 @@ fn gen(self: *Self) !void {
             // dbg_epilogue_begin) is the last exitlude jump
             // relocation (which would just jump one instruction
             // further), it can be safely removed
-            self.mir_instructions.orderedRemove(self.exitlude_jump_relocs.pop());
+            self.mir_instructions.orderedRemove(self.exitlude_jump_relocs.pop().?);
         }
 
         for (self.exitlude_jump_relocs.items) |jmp_reloc| {
@@ -734,7 +734,6 @@ fn genBody(self: *Self, body: []const Air.Inst.Index) InnerError!void {
             .fpext           => try self.airFpext(inst),
             .intcast         => try self.airIntCast(inst),
             .trunc           => try self.airTrunc(inst),
-            .int_from_bool   => try self.airIntFromBool(inst),
             .is_non_null     => try self.airIsNonNull(inst),
             .is_non_null_ptr => try self.airIsNonNullPtr(inst),
             .is_null         => try self.airIsNull(inst),
@@ -746,7 +745,6 @@ fn genBody(self: *Self, body: []const Air.Inst.Index) InnerError!void {
             .load            => try self.airLoad(inst),
             .loop            => try self.airLoop(inst),
             .not             => try self.airNot(inst),
-            .int_from_ptr    => try self.airIntFromPtr(inst),
             .ret             => try self.airRet(inst),
             .ret_safe        => try self.airRet(inst), // TODO
             .ret_load        => try self.airRetLoad(inst),
@@ -1292,13 +1290,6 @@ fn airTrunc(self: *Self, inst: Air.Inst.Index) InnerError!void {
     };
 
     return self.finishAir(inst, result, .{ ty_op.operand, .none, .none });
-}
-
-fn airIntFromBool(self: *Self, inst: Air.Inst.Index) InnerError!void {
-    const un_op = self.air.instructions.items(.data)[@intFromEnum(inst)].un_op;
-    const operand = try self.resolveInst(un_op);
-    const result: MCValue = if (self.liveness.isUnused(inst)) .dead else operand;
-    return self.finishAir(inst, result, .{ un_op, .none, .none });
 }
 
 fn airNot(self: *Self, inst: Air.Inst.Index) InnerError!void {
@@ -4703,7 +4694,7 @@ fn airCondBr(self: *Self, inst: Air.Inst.Index) InnerError!void {
 
     try self.branch_stack.append(.{});
     errdefer {
-        _ = self.branch_stack.pop();
+        _ = self.branch_stack.pop().?;
     }
 
     try self.ensureProcessDeathCapacity(liveness_condbr.then_deaths.len);
@@ -4714,7 +4705,7 @@ fn airCondBr(self: *Self, inst: Air.Inst.Index) InnerError!void {
 
     // Revert to the previous register and stack allocation state.
 
-    var saved_then_branch = self.branch_stack.pop();
+    var saved_then_branch = self.branch_stack.pop().?;
     defer saved_then_branch.deinit(self.gpa);
 
     self.register_manager.registers = parent_registers;
@@ -4809,7 +4800,7 @@ fn airCondBr(self: *Self, inst: Air.Inst.Index) InnerError!void {
     }
 
     {
-        var item = self.branch_stack.pop();
+        var item = self.branch_stack.pop().?;
         item.deinit(self.gpa);
     }
 
@@ -5068,7 +5059,7 @@ fn lowerBlock(self: *Self, inst: Air.Inst.Index, body: []const Air.Inst.Index) !
         // If the last Mir instruction is the last relocation (which
         // would just jump one instruction further), it can be safely
         // removed
-        self.mir_instructions.orderedRemove(relocs.pop());
+        self.mir_instructions.orderedRemove(relocs.pop().?);
     }
     for (relocs.items) |reloc| {
         try self.performReloc(reloc);
@@ -5134,7 +5125,7 @@ fn airSwitch(self: *Self, inst: Air.Inst.Index) InnerError!void {
 
         try self.branch_stack.append(.{});
         errdefer {
-            _ = self.branch_stack.pop();
+            _ = self.branch_stack.pop().?;
         }
 
         try self.ensureProcessDeathCapacity(liveness.deaths[case.idx].len);
@@ -5144,7 +5135,7 @@ fn airSwitch(self: *Self, inst: Air.Inst.Index) InnerError!void {
         try self.genBody(case.body);
 
         // Revert to the previous register and stack allocation state.
-        var saved_case_branch = self.branch_stack.pop();
+        var saved_case_branch = self.branch_stack.pop().?;
         defer saved_case_branch.deinit(self.gpa);
 
         self.register_manager.registers = parent_registers;
@@ -5172,7 +5163,7 @@ fn airSwitch(self: *Self, inst: Air.Inst.Index) InnerError!void {
 
         try self.branch_stack.append(.{});
         errdefer {
-            _ = self.branch_stack.pop();
+            _ = self.branch_stack.pop().?;
         }
 
         const else_deaths = liveness.deaths.len - 1;
@@ -5183,7 +5174,7 @@ fn airSwitch(self: *Self, inst: Air.Inst.Index) InnerError!void {
         try self.genBody(else_body);
 
         // Revert to the previous register and stack allocation state.
-        var saved_case_branch = self.branch_stack.pop();
+        var saved_case_branch = self.branch_stack.pop().?;
         defer saved_case_branch.deinit(self.gpa);
 
         self.register_manager.registers = parent_registers;
@@ -5904,12 +5895,6 @@ fn genSetStackArgument(self: *Self, ty: Type, stack_offset: u32, mcv: MCValue) I
             return self.genSetStackArgument(ty, stack_offset, MCValue{ .register = reg });
         },
     }
-}
-
-fn airIntFromPtr(self: *Self, inst: Air.Inst.Index) InnerError!void {
-    const un_op = self.air.instructions.items(.data)[@intFromEnum(inst)].un_op;
-    const result = try self.resolveInst(un_op);
-    return self.finishAir(inst, result, .{ un_op, .none, .none });
 }
 
 fn airBitCast(self: *Self, inst: Air.Inst.Index) InnerError!void {
