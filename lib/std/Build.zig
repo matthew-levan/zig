@@ -743,16 +743,19 @@ pub fn generateCompdb(self: *Build) !void {
         if (entry.module.resolved_target) |*target| {
             if (!target.query.isNative()) {
                 const triple = try target.query.zigTriple(self.allocator);
-                const cpu = try target.query.serializeCpuAlloc(self.allocator);
+                // const cpu = try target.query.serializeCpuAlloc(self.allocator);
 
+                temp.clearRetainingCapacity();
                 try temp.appendSlice("--target=");
                 try temp.appendSlice(triple);
                 try std.json.encodeJsonString(temp.items, .{}, writer);
-                temp.clearRetainingCapacity();
+                try writer.writeAll(",");
 
-                try temp.appendSlice("-mcpu=");
-                try temp.appendSlice(cpu);
-                try std.json.encodeJsonString(temp.items, .{}, writer);
+                // temp.clearRetainingCapacity();
+                // try temp.appendSlice("-mcpu=");
+                // try temp.appendSlice(cpu);
+                // try std.json.encodeJsonString(temp.items, .{}, writer);
+                // try writer.writeAll(",");
             }
         }
 
